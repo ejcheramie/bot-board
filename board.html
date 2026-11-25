@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bot Board</title>
+<script>
+/* ============================================================
+   BOARD CONFIG AND DATA — the only block to rewrite when the
+   board is rebuilt or customized. A new user's bot fills this
+   block, then leaves the rest of this file alone.
+
+   Visual tweaks (theme, density, fields, and so on) can also
+   be made in the gear / Settings panel and are saved in
+   localStorage when persistPrefs is true. Structural changes
+   (columns, urgency rules, custom badges) belong here.
+
+   Times are ISO 8601 with an offset. col must match a column
+   key. Card id must stay stable: Snooze / Dismiss are saved
+   in localStorage under it.
+   since = when it started waiting (ISO).
+   sinceBefore = only an upper bound is known (YYYY-MM-DD).
+
+   The cards below are fictional sample data for first-run
+   preview. Replace them with the owner's live items after setup.
+   Shipped defaults match the original board look and behavior.
+   ============================================================ */
+const CONFIG = {
+  timezone: "America/New_York",
+  title: "Bot Board",
+  boardBotName: "Board Bot",
+  pushTimes: "8:00 / 12:00 / 16:00",
+  reminderColor: "#ED7D31",
+  logo: "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='8' fill='%231D3F8F'/%3E%3Crect x='8' y='14' width='8' height='26' rx='1.5' fill='%23f2c230'/%3E%3Crect x='20' y='10' width='8' height='30' rx='1.5' fill='%23f5f3ec'/%3E%3Crect x='32' y='20' width='8' height='20' rx='1.5' fill='%23f2c230'/%3E%3C/svg%3E",
+  showHeaderLogo: false,
+  persistPrefs: true,
+  defaultFilter: "all",
+  swimlanes: false,
+  density: "comfortable",
+  fields: { age: true, deadline: true, group: true, sources: true },
+  urgency: { enabled: true, dueWithinHours: 48, waitingMoreThanDays: 3 },
+  snooze: { default: "midnight", customHours: 2, morningHour: 9 },
+  badges: { money: true, custom: [] },
+  refresh: { enabled: true, intervalSec: 900 },
+  theme: {
+    preset: "auto",
+    accent: "#f2c230",
+    font: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Inter, Roboto, Helvetica, Arial, sans-serif"
+  },
+  columns: [
+    { key: "reminders", label: "Reminders", color: "#ED7D31", ink: "#1a1611" },
+    { key: "waiting", label: "Waiting on me", color: "#f2c230", ink: "#1a1611" },
+    { key: "progress", label: "In progress", color: "#4472C4", ink: "#ffffff" },
+    { key: "blocked", label: "Blocked", color: "#C00000", ink: "#ffffff" },
+    { key: "done", label: "Done this week", color: "#70AD47", ink: "#10210a" }
+  ],
+  groups: {
+    work: { label: "Work", button: "Work", color: "#1D3F8F", logo: true },
+    personal: { label: "Personal", button: "Personal", color: "#7B4FC9" },
+    side: { label: "Side Project", button: "Side project", color: "#2F6FDE" }
+  },
+  groupOrder: ["work", "side", "personal"],
+  bots: [
+    { id: "sample-board-bot", name: "Board Bot", group: "work" },
+    { id: "sample-inbox-bot", name: "Inbox Bot", group: "work" },
+    { id: "sample-finance-bot", name: "Finance Bot", group: "work" },
+    { id: "sample-research-bot", name: "Research Bot", group: "side" },
+    { id: "sample-travel-bot", name: "Travel Bot", group: "personal" }
+  ],
+  updated: "2026-11-24T22:00:00-05:00",
+  cards: [
+    /* ---------- WAITING ON ME ---------- */
+    {
+      id: "finance-invoice", bot: "Finance Bot", botId: "sample-finance-bot", group: "work", col: "waiting", money: true,
+      title: "Approve the $1,200 vendor invoice?",
+      summary: "Yes or no on paying invoice 1042 for the office furniture order.",
+      context: [
+        "The invoice arrived Nov 20. Nothing has been paid or scheduled.",
+        "It matches the quote you already approved. Net-15, due Nov 28.",
+        "Finance Bot prepared a payment draft and is holding it for your go-ahead."
+      ],
+      next: "Tell Finance Bot yes or no on the payment draft.",
+      since: "2026-11-20T14:10:00-05:00",
+      due: "2026-11-28T17:00:00-05:00",
+      links: [{ title: "Invoice 1042 (sample)", site: "example.com", href: "https://example.com/invoices/1042" }]
+    },
+    {
+      id: "inbox-renewal", bot: "Inbox Bot", botId: "sample-inbox-bot", group: "work", col: "waiting",
+      title: "Reply to the contract-renewal note",
+      summary: "A vendor asked whether you want to renew for another year. Draft is ready.",
+      context: [
+        "The message came Nov 22. No reply has been sent.",
+        "Inbox Bot drafted a short yes and a short let-me-think-about-it. Both are waiting in chat.",
+        "The vendor asked for an answer by tomorrow afternoon."
+      ],
+      next: "Pick a draft in Inbox Bot's chat, edit if you want, and approve the send.",
+      since: "2026-11-22T09:15:00-05:00",
+      due: "2026-11-25T17:00:00-05:00",
+      links: [{ title: "Renewal thread (sample)", site: "example.com", href: "https://example.com/mail/renewal-thread" }]
+    },
+    {
+      id: "research-outline", bot: "Research Bot", botId: "sample-research-bot", group: "side", col: "waiting",
+      title: "Pick one of the three article outlines",
+      summary: "Three outlines are ready. Research Bot will only go deep on the one you choose.",
+      context: [
+        "Option A: a beginner's guide to the topic.",
+        "Option B: a comparison of three common approaches.",
+        "Option C: a short case study with sources.",
+        "No draft has been started."
+      ],
+      next: "Tell Research Bot which outline to pursue, or ask for a mix.",
+      since: "2026-11-22T16:40:00-05:00"
+    },
+    {
+      id: "travel-itinerary", bot: "Travel Bot", botId: "sample-travel-bot", group: "personal", col: "waiting", money: true,
+      title: "Confirm the March itinerary draft",
+      summary: "Lowest sample fare so far is $642 round trip, departing Mar 12 and returning Mar 16.",
+      context: [
+        "Two layover options and one nonstop are in the draft.",
+        "Travel Bot recommends waiting a week unless the nonstop drops under $700.",
+        "Nothing is booked."
+      ],
+      next: "Say book, wait, or change the dates. Travel Bot will not book without your OK.",
+      since: "2026-11-23T11:05:00-05:00",
+      due: "2026-11-26T12:00:00-05:00",
+      dueNote: "milestone",
+      links: [{ title: "Itinerary draft (sample)", site: "example.com", href: "https://example.com/travel/march-draft" }]
+    },
+    {
+      id: "board-standup", bot: "Board Bot", botId: "sample-board-bot", group: "work", col: "waiting",
+      title: "Thursday team standup: still on?",
+      summary: "The weekly standup is on your calendar Thursday, Nov 26, 9:30 AM.",
+      context: [
+        "You accepted earlier this week. No cancellation is on the calendar.",
+        "The next one after that is Thu, Dec 3, 9:30 AM."
+      ],
+      next: "Keep it, skip it, or ask to move it. Board Bot can draft a note for your approval.",
+      due: "2026-11-26T09:30:00-05:00",
+      links: [{ title: "Weekly standup, Nov 26 (sample)", site: "example.com", href: "https://example.com/calendar/standup-nov-26" }]
+    },
+
+    /* ---------- REMINDERS ---------- */
+    {
+      id: "rem-accountant", bot: "Board Bot", botId: "sample-board-bot", col: "reminders", schedule: "Daily, 10:00 AM",
+      title: "Call the accountant for a quote",
+      summary: "Daily at 10:00 AM. Recurring until you remove it.",
+      context: ["Set as a sample reminder. Board Bot pings you in chat at 10:00 AM each day and does not place the call."],
+      next: "Make the call, then tell Board Bot to remove the reminder."
+    },
+    {
+      id: "rem-status", bot: "Board Bot", botId: "sample-board-bot", col: "reminders", schedule: "Daily, 6:00 PM",
+      title: "Send the weekly status email",
+      summary: "Daily at 6:00 PM. Recurring until you remove it.",
+      context: [
+        "Board Bot never sends this email for you.",
+        "A draft can wait in chat if you ask for one."
+      ],
+      next: "Send the note when you are ready, then tell Board Bot to stop the reminder."
+    },
+    {
+      id: "rem-mentor", bot: "Board Bot", botId: "sample-board-bot", col: "reminders", schedule: "Every weekday check-in",
+      title: "Check in with the project mentor",
+      summary: "In each weekday check-in. Recurring until you say it's done.",
+      context: ["Sample standing reminder."],
+      next: "Have the check-in, then tell Board Bot when it's done.",
+      sinceBefore: "2026-11-17"
+    },
+
+    /* ---------- IN PROGRESS ---------- */
+    {
+      id: "inbox-watch", bot: "Inbox Bot", botId: "sample-inbox-bot", group: "work", col: "progress",
+      title: "Watching a support thread",
+      summary: "Tracking a billing question from a customer. It comes back to you if still open after Friday.",
+      context: [
+        "Routine mail is logged only. Escalations, items open over a week, or mail addressed to you by name come to the board.",
+        "Inbox Bot drafts replies and never sends them on its own."
+      ],
+      next: "Nothing needed from you now.",
+      since: "2026-11-24T10:12:00-05:00"
+    },
+    {
+      id: "finance-license", bot: "Finance Bot", botId: "sample-finance-bot", group: "work", col: "progress", money: true,
+      title: "Software license renewal in motion",
+      summary: "The license expires Dec 23. You asked the office manager to put it on a card last week.",
+      context: [
+        "A renewal notice arrived Nov 23. New keys are issued after payment.",
+        "Finance Bot is watching for confirmation and will move this back to Waiting on me if it still needs you."
+      ],
+      next: "Confirm the office manager finished the renewal well before Dec 23.",
+      due: "2026-12-23T00:00:00-05:00",
+      links: [{ title: "Renewal notice (sample)", site: "example.com", href: "https://example.com/mail/license-renewal" }]
+    },
+    {
+      id: "travel-fares", bot: "Travel Bot", botId: "sample-travel-bot", group: "personal", col: "progress", money: true,
+      title: "Tracking fares for the March trip",
+      summary: "Next automatic fare check is Thu, Nov 26. Nothing is booked.",
+      context: [
+        "The nonstop is still above the target you set.",
+        "Travel Bot will ping you if a fare crosses the target."
+      ],
+      next: "Nothing needed unless you want to change the target or the dates.",
+      due: "2026-12-11T09:00:00-05:00",
+      dueNote: "milestone"
+    },
+    {
+      id: "research-scan", bot: "Research Bot", botId: "sample-research-bot", group: "side", col: "progress",
+      title: "Daily source scan",
+      summary: "An 8:00 AM search every day. New matches go to Research Bot's chat and to this board.",
+      context: [],
+      next: "Nothing needed from you unless a match looks useful."
+    },
+    {
+      id: "board-onboarding", bot: "Board Bot", botId: "sample-board-bot", group: "work", col: "progress",
+      title: "Onboarding a new specialist bot",
+      summary: "A new teammate was added and is being pointed at this board's update format.",
+      context: ["It will start pushing only when something is new."],
+      next: "Nothing needed from you now."
+    },
+
+    /* ---------- BLOCKED ---------- */
+    {
+      id: "board-meeting", bot: "Board Bot", botId: "sample-board-bot", group: "work", col: "blocked",
+      title: "Project review: waiting on a room",
+      summary: "Tue, Dec 1 at 1:30 PM is agreed. Waiting on the other attendee to confirm a location.",
+      context: [
+        "You said yes to the time. The calendar hold is on.",
+        "Board Bot adds the location only if you ask, once it is confirmed."
+      ],
+      next: "Watch for the location. No need to write anyone unless you want a nudge drafted for approval.",
+      since: "2026-11-24T13:07:00-05:00",
+      due: "2026-12-01T13:30:00-05:00",
+      dueNote: "meeting",
+      links: [{ title: "Review hold (sample)", site: "example.com", href: "https://example.com/calendar/review-dec-1" }]
+    },
+    {
+      id: "research-paused", bot: "Research Bot", botId: "sample-research-bot", group: "side", col: "blocked",
+      title: "Paused until dataset access is approved",
+      summary: "The deep-dive is parked. A request for the sample dataset is outstanding.",
+      context: ["Research Bot is not chasing this daily."],
+      next: "When access lands, tell Research Bot to resume.",
+      due: "2026-12-15T09:00:00-05:00",
+      dueNote: "back"
+    },
+    {
+      id: "finance-receipts", bot: "Finance Bot", botId: "sample-finance-bot", group: "work", col: "blocked",
+      title: "Expense report waiting on receipts",
+      summary: "Two receipts are still missing, so the report cannot be filed.",
+      context: ["Finance Bot will move this to Waiting on me when the last receipt arrives, or if you want to file without them."],
+      next: "Add the receipts in Finance Bot's chat, or say to file as-is."
+    },
+
+    /* ---------- DONE THIS WEEK ---------- */
+    {
+      id: "finance-close", bot: "Finance Bot", botId: "sample-finance-bot", group: "work", col: "done", money: true,
+      title: "Monthly close confirmed with the bookkeeper",
+      summary: "You confirmed the numbers Nov 24. The bookkeeper filed the close the same day.",
+      context: ["One late contractor invoice was added before filing."],
+      next: "Nothing needed.",
+      links: [{ title: "Close thread (sample)", site: "example.com", href: "https://example.com/mail/monthly-close" }]
+    },
+    {
+      id: "research-briefs", bot: "Research Bot", botId: "sample-research-bot", group: "side", col: "done",
+      title: "4 new source briefs delivered",
+      summary: "Two on Nov 23 and two on Nov 24, all in Research Bot's chat.",
+      context: [],
+      next: "See Waiting on me if you want to pick an outline."
+    },
+    {
+      id: "inbox-sweep", bot: "Inbox Bot", botId: "sample-inbox-bot", group: "work", col: "done",
+      title: "Weekly inbox sweep finished",
+      summary: "Delivered Mon Nov 23 at 6:19 AM.",
+      context: [],
+      next: "Nothing needed."
+    },
+    {
+      id: "board-setup", bot: "Board Bot", botId: "sample-board-bot", group: "work", col: "done",
+      title: "Sample board setup finished",
+      summary: "This preview board was generated with fictional cards so you can try the layout.",
+      context: [],
+      next: "After setup, these sample cards are replaced with your live items."
+    }
+  ]
+
+};
+
+const TZ = CONFIG.timezone;
+const COLS = CONFIG.columns;
+const GROUPS = CONFIG.groups;
+const GROUP_ORDER = CONFIG.groupOrder;
+const GROUP_BTNS = [["all", "All"]].concat(GROUP_ORDER.map(function (k) {
+  return [k, (GROUPS[k] && (GROUPS[k].button || GROUPS[k].label)) || k];
+}));
+const REM_COLOR = CONFIG.reminderColor || "#ED7D31";
+const BOARD = { updated: CONFIG.updated, cards: CONFIG.cards };
+const DEFAULT_FONT = "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Inter, Roboto, Helvetica, Arial, sans-serif";
+const FONTS = {
+  system: DEFAULT_FONT,
+  serif: "Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif",
+  mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+};
+</script>
+<style>
+:root, [data-theme="dark"] {
+  /* Night: true black page; blue-gray layers from the bookmarks dashboard (#141c33 / #1b2544 / #2e3b63) */
+  --bg:#000000; --panel:#0f1526; --panel2:#1b2544; --edge:#232d48; --cardEdge:#34436b;
+  --ink:#f5f3ec; --dim:#aab0c9; --faint:#7f87a6;
+  --gold:#f2c230; --goldSoft:rgba(242,194,48,0.15); --goldInk:#f2c230;
+  --red:#d1262c; --redSoft:rgba(209,38,44,0.20); --dangerInk:#ff8b8f; --dangerBtn:#ffb3b5;
+  --scrim:rgba(0,0,0,0.7);
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --bg:#d6dde8; --panel:#e1e7f0; --panel2:#eef2f7; --edge:#c4cddb; --cardEdge:#b9c4d6;
+  --ink:#121622; --dim:#3b4254; --faint:#646b7e;
+  --gold:#f2c230; --goldSoft:rgba(242,194,48,0.22); --goldInk:#7a5800;
+  --red:#c4161c; --redSoft:rgba(196,22,28,0.10); --dangerInk:#b0121a; --dangerBtn:#a3121a;
+  --scrim:rgba(18,22,34,0.35);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; height:100%; overflow:hidden; }
+body {
+  background:var(--bg); color:var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  --font: 13px; --img: 40px;
+}
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+#app { height:100vh; width:100vw; display:flex; flex-direction:column; padding:10px 10px 8px; gap:10px; }
+header { position:relative; padding-right:380px; flex-shrink:0; display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; border-bottom:1px solid var(--edge); padding-bottom:10px; }
+.title { font-weight:700; font-size:22px; letter-spacing:-0.01em; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+.title-logo { width:28px; height:28px; border-radius:4px; object-fit:contain; align-self:center; border:1px solid var(--edge); background:var(--panel); }
+.count { font-size:12.5px; color:var(--goldInk); font-weight:500; border:1px solid var(--goldSoft); background:var(--goldSoft); padding:2px 8px; border-radius:3px; }
+.sub { color:var(--dim); font-size:12px; margin-top:3px; }
+.controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.seg { display:flex; align-items:center; gap:2px; background:var(--panel); border:1px solid var(--edge); border-radius:4px; padding:2px 3px 2px 9px; }
+.seg .lbl { font-size:11px; color:var(--faint); margin-right:4px; }
+.seg .pm { background:transparent; border:none; color:var(--ink); font-size:15px; line-height:1; padding:3px 8px; cursor:pointer; }
+.btn { background:var(--panel); border:1px solid var(--edge); color:var(--ink); padding:6px 12px; border-radius:4px; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.btn.small { padding:3px 8px; }
+.btn.active { background:var(--panel2); border-color:var(--gold); color:var(--goldInk); }
+.btn.primary { background:var(--gold); border-color:var(--gold); color:#1a1611; }
+.btn.danger { background:var(--redSoft); border-color:var(--red); color:var(--dangerBtn); }
+#topRight { position:absolute; top:0; right:0; display:flex; align-items:center; gap:8px; }
+#refreshIn { width:74px; background:var(--panel2); border:1px solid var(--edge); color:var(--ink); border-radius:3px; padding:3px 6px; font-size:12.5px; text-align:center; outline:none; }
+#refreshIn:focus { border-color:var(--gold); }
+#refreshIn.bad { border-color:var(--red); color:var(--dangerInk); }
+#refreshLeft { font-size:11px; color:var(--faint); min-width:64px; text-align:right; margin-left:4px; white-space:nowrap; }
+#refreshLeft.paused { color:var(--goldInk); }
+#reloadNow { font-size:16px; }
+@media (max-width: 1000px) { header { padding-right:0; padding-top:48px; } }
+#nightBtn { flex-shrink:0; width:40px; height:40px; border-radius:50%; border:2px solid var(--gold); background:var(--panel2); color:var(--goldInk); font-size:20px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; -webkit-user-select:none; user-select:none; touch-action:manipulation; position:relative; }
+#nightBtn:hover { background:var(--goldSoft); }
+#nightBtn .auto { position:absolute; bottom:-4px; right:-6px; font-size:8px; font-weight:700; letter-spacing:0.04em; background:var(--gold); color:#1a1611; border-radius:3px; padding:0 3px; }
+#gearBtn { flex-shrink:0; width:36px; height:36px; border-radius:50%; border:1px solid var(--edge); background:var(--panel2); color:var(--ink); font-size:18px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
+#gearBtn:hover, #gearBtn.active { border-color:var(--gold); color:var(--goldInk); background:var(--goldSoft); }
+.groups { display:flex; gap:4px; flex-wrap:wrap; }
+#q { background:var(--panel); border:1px solid var(--edge); color:var(--ink); padding:7px 11px; border-radius:4px; font-size:12.5px; width:220px; max-width:100%; outline:none; }
+#q:focus { border-color:var(--gold); }
+.banner { flex-shrink:0; font-size:12px; color:var(--goldInk); background:var(--goldSoft); border:1px solid var(--gold); border-radius:4px; padding:6px 10px; }
+#board { flex:1 1 auto; min-height:0; width:100%; display:grid; grid-template-columns:repeat(5, minmax(220px, 1fr)); grid-template-rows:minmax(0,1fr); gap:10px; overflow-x:auto; overflow-y:hidden; }
+.col { min-width:0; min-height:0; background:var(--panel); border:1px solid var(--edge); border-radius:8px; display:flex; flex-direction:column; }
+.colhead { padding:10px 12px; display:flex; justify-content:space-between; align-items:center; border-radius:7px 7px 0 0; flex-shrink:0; }
+.colhead .n { font-weight:700; font-size:13.5px; }
+.colhead .c { font-size:11.5px; opacity:0.85; }
+.colbody { padding:8px; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:8px; flex:1 1 auto; min-height:0; }
+.empty { color:var(--faint); font-size:12px; text-align:center; padding:24px 8px; }
+.lane { display:flex; flex-direction:column; gap:8px; }
+.lane-label { font-size:10.5px; letter-spacing:0.06em; color:var(--faint); font-weight:700; padding:4px 2px 0; text-transform:uppercase; }
+.card { position:relative; flex-shrink:0; background:var(--panel2); border:1px solid var(--cardEdge); box-shadow:0 1px 2px rgba(0,0,0,0.25); border-left-width:4px; border-radius:5px; cursor:pointer; overflow:hidden; padding-bottom:10px; }
+.card:hover, .card:focus { border-color:var(--gold); outline:none; }
+.card.faded { opacity:0.75; }
+.card .idx { position:absolute; top:6px; right:7px; font-size:9.5px; color:var(--faint); }
+.card .top { display:flex; gap:9px; padding:9px 34px 0 10px; align-items:center; }
+.thumb { width:var(--img); height:var(--img); flex-shrink:0; border-radius:4px; overflow:hidden; border:1px solid var(--edge); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:calc(var(--img) * 0.36); }
+.thumb img { width:100%; height:100%; object-fit:contain; display:block; }
+.noimg .thumb { display:none; }
+.card .who { flex:1; min-width:0; }
+.card .bot { font-weight:700; font-size:calc(var(--font) + 0.5px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.card .meta { font-size:calc(var(--font) - 2px); color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tags { display:flex; gap:5px; margin-top:4px; flex-wrap:wrap; }
+.tag { font-size:9px; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid; }
+.tag.urgent { background:var(--redSoft); color:var(--dangerInk); border-color:var(--red); }
+.tag.money { background:var(--goldSoft); color:var(--goldInk); border-color:var(--gold); }
+.tag.hid { background:var(--panel); color:var(--dim); border-color:var(--edge); }
+.card .body { font-size:var(--font); line-height:1.45; color:var(--dim); margin:9px 10px 0; padding-top:8px; border-top:1px solid var(--cardEdge); }
+.card .ttl { color:var(--ink); font-weight:600; margin-bottom:2px; }
+.card .sum { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.card .due { margin-top:4px; font-size:calc(var(--font) - 2.5px); color:var(--faint); }
+.card .due.soon { color:var(--dangerInk); }
+#scrim { position:fixed; inset:0; background:var(--scrim); display:none; justify-content:flex-end; z-index:10; }
+#scrim.open { display:flex; }
+#drawer { width:460px; max-width:100%; height:100%; background:var(--panel); border-left:1px solid var(--edge); overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; font-size:13.5px; line-height:1.5; }
+.dhead { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+.dhead .l { display:flex; gap:10px; align-items:center; min-width:0; }
+.dhead .thumb { width:40px; height:40px; font-size:14px; }
+.dhead .crumb { font-size:11px; color:var(--faint); }
+.dhead .dt { font-weight:700; font-size:17px; color:var(--ink); }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.note { font-size:11.5px; color:var(--dim); }
+.facts { display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--dim); }
+.d-ctx { margin:0; padding-left:18px; color:var(--dim); display:flex; flex-direction:column; gap:4px; }
+.next { background:var(--panel2); border:1px solid var(--cardEdge); border-left:3px solid var(--gold); border-radius:4px; padding:8px 10px; }
+.next .k { font-size:10.5px; color:var(--goldInk); letter-spacing:0.06em; margin-bottom:2px; }
+.srcs { display:flex; flex-direction:column; gap:5px; }
+.srcs .k { font-size:10.5px; color:var(--faint); letter-spacing:0.06em; }
+a.lnk { color:var(--goldInk); text-decoration:none; font-weight:500; }
+a.lnk:hover { text-decoration:underline; }
+a.lnk .site { color:var(--faint); font-size:11px; }
+.chat { display:flex; flex-direction:column; gap:6px; border-top:1px solid var(--edge); padding-top:10px; }
+.chat a { font-size:14px; font-weight:600; }
+.chat .fine { font-size:11.5px; color:var(--faint); }
+.dismiss { margin-top:auto; padding-top:6px; }
+.dismiss .fine { font-size:11px; color:var(--faint); }
+.snooze-wrap { position:relative; }
+.snooze-menu { position:absolute; left:0; top:100%; margin-top:4px; background:var(--panel2); border:1px solid var(--edge); border-radius:6px; padding:4px; display:none; flex-direction:column; min-width:200px; z-index:12; box-shadow:0 8px 24px rgba(0,0,0,0.35); }
+.snooze-menu.open { display:flex; }
+.snooze-menu button { background:transparent; border:none; color:var(--ink); text-align:left; padding:7px 10px; border-radius:4px; font:inherit; font-size:12.5px; cursor:pointer; }
+.snooze-menu button:hover { background:var(--goldSoft); }
+.snooze-custom { display:flex; gap:6px; align-items:center; padding:6px 8px; }
+.snooze-custom input { width:56px; background:var(--panel); border:1px solid var(--edge); color:var(--ink); border-radius:3px; padding:3px 6px; font-size:12.5px; }
+body.compact { --font: 12px; --img: 32px; }
+body.compact #app { padding:8px 8px 6px; gap:8px; }
+body.compact .colhead { padding:7px 10px; }
+body.compact .colbody, body.compact .lane { gap:5px; }
+body.compact .colbody { padding:6px; }
+body.compact .card { padding-bottom:6px; }
+body.compact .card .top { padding:6px 30px 0 8px; gap:6px; }
+body.compact .card .body { margin:6px 8px 0; padding-top:6px; }
+body.compact .card .sum { -webkit-line-clamp:2; }
+#setScrim { position:fixed; inset:0; background:var(--scrim); display:none; justify-content:flex-end; z-index:20; }
+#setScrim.open { display:flex; }
+#setPanel { width:400px; max-width:100%; height:100%; background:var(--panel); border-left:1px solid var(--edge); overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:14px; font-size:13px; }
+#setPanel h2 { margin:0; font-size:17px; }
+#setPanel h3 { margin:12px 0 6px; font-size:11px; letter-spacing:0.06em; color:var(--faint); font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.set-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.set-row label.chk { display:flex; gap:6px; align-items:center; font-size:12.5px; }
+.set-grid { display:grid; grid-template-columns:92px 1fr 84px; gap:6px 8px; align-items:center; }
+.set-grid label { font-size:12.5px; color:var(--dim); }
+.set-grid input[type="color"] { width:100%; height:28px; border:1px solid var(--edge); background:var(--panel2); border-radius:4px; padding:2px; }
+.set-grid input[type="text"], #setPanel select, #setTitle { background:var(--panel2); border:1px solid var(--edge); color:var(--ink); border-radius:4px; padding:5px 8px; font:inherit; font-size:12.5px; width:100%; }
+#setPanel .hint { font-size:11.5px; color:var(--faint); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div id="topRight">
+      <div class="seg" id="refreshSeg" title="Auto-reload interval (hh:mm:ss). 00:00:00 turns it off. Minimum 00:00:30.">
+        <span class="lbl mono">Refresh</span>
+        <input id="refreshIn" class="mono" inputmode="numeric" maxlength="8" spellcheck="false" autocomplete="off" aria-label="Refresh interval hh:mm:ss">
+        <span id="refreshLeft" class="mono"></span>
+        <button class="pm" id="reloadNow" type="button" title="Reload now" aria-label="Reload now">⟳</button>
+      </div>
+      <button id="gearBtn" type="button" aria-label="Board settings" title="Settings">⚙</button>
+      <button id="nightBtn" type="button" aria-label="Switch day / night" title="Tap: switch Day / Night · long-press: back to Auto"></button>
+    </div>
+    <div>
+      <div class="title"><img id="headerLogo" class="title-logo" alt="" style="display:none"><span id="boardTitle">Bot Board</span> <span class="count mono" id="count"></span></div>
+      <div class="sub mono" id="sub"></div>
+    </div>
+    <div class="controls">
+      <div class="seg" title="Theme"><span class="lbl mono">Theme</span>
+        <button class="btn small" data-theme-btn="auto">Auto</button>
+        <button class="btn small" data-theme-btn="light">Light</button>
+        <button class="btn small" data-theme-btn="dark">Dark</button>
+        <button class="btn small" data-theme-btn="custom">Custom</button>
+      </div>
+      <div class="seg"><span class="lbl mono">Text</span>
+        <button class="pm" title="Text smaller" data-bump="font" data-d="-1">−</button>
+        <button class="pm" title="Text larger" data-bump="font" data-d="1">+</button>
+      </div>
+      <div class="seg"><span class="lbl mono">Image</span>
+        <button class="pm" title="Image smaller" data-bump="img" data-d="-8">−</button>
+        <button class="pm" title="Image larger" data-bump="img" data-d="8">+</button>
+      </div>
+      <input id="q" class="mono" placeholder="search bot, title or text…" autocomplete="off">
+      <div class="groups" id="groups"></div>
+      <button class="btn" id="today" title="Due today, urgent, and reminders">Today</button>
+      <button class="btn" id="hiddenBtn" title="Show snoozed and dismissed cards">Hidden (0)</button>
+    </div>
+  </header>
+  <div class="banner mono" id="banner" style="display:none">Showing snoozed and dismissed cards only. Open one to restore it. Click Hidden again to go back.</div>
+  <div id="board"></div>
+</div>
+<div id="scrim"><div id="drawer"></div></div>
+<div id="setScrim"><div id="setPanel" role="dialog" aria-label="Board settings"></div></div>
+
+<script>
+const HOUR = 3600000, DAY = 24 * HOUR;
+const LS_HIDDEN = "botboard.v1.hidden", LS_PREFS = "botboard.v1.prefs", LS_THEME = "botboard.v1.theme";
+const LS_UI = "botboard.v1.ui", LS_REFRESH = "botboard.v1.refreshSec";
+const REFRESH_MIN = 30, REFRESH_DEFAULT = 900;
+
+function lsGet(k, f) { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : f; } catch (e) { return f; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function hexOk(v) { return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(String(v || "")); }
+function hexToRgb(h) {
+  if (!hexOk(h)) return null;
+  let n = h.slice(1);
+  if (n.length === 3) n = n[0]+n[0]+n[1]+n[1]+n[2]+n[2];
+  return { r: parseInt(n.slice(0,2),16), g: parseInt(n.slice(2,4),16), b: parseInt(n.slice(4,6),16) };
+}
+function hexSoft(h, a) {
+  const rgb = hexToRgb(h); if (!rgb) return "rgba(242,194,48," + a + ")";
+  return "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + "," + a + ")";
+}
+function darkenHex(h) {
+  const rgb = hexToRgb(h); if (!rgb) return "#7a5800";
+  const r = Math.round(rgb.r * 0.42), g = Math.round(rgb.g * 0.38), b = Math.round(rgb.b * 0.2);
+  const p = n => ("0" + n.toString(16)).slice(-2);
+  return "#" + p(r) + p(g) + p(b);
+}
+function visibleColumns() { return (COLS || []).filter(c => c && !c.hidden); }
+function colInk(c) { return c.ink || "#ffffff"; }
+
+function tzParts(t) {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: TZ, year:"numeric", month:"numeric", day:"numeric", hour:"numeric", minute:"numeric", hourCycle:"h23" }).formatToParts(new Date(t));
+  const g = ty => Number((p.find(x => x.type === ty) || { value: "0" }).value);
+  return { y: g("year"), m: g("month"), d: g("day"), h: g("hour"), min: g("minute") };
+}
+function nextCtMidnight(now) {
+  const p = tzParts(now);
+  let t = Date.UTC(p.y, p.m - 1, p.d + 1, 12, 0, 0);
+  const q = tzParts(t);
+  t -= q.h * HOUR + (q.min || 0) * 60000;
+  const r = tzParts(t);
+  if (r.h !== 0 || r.min !== 0) t -= r.h * HOUR + (r.min || 0) * 60000;
+  return t;
+}
+function nextMorning(now) {
+  const hour = (CONFIG.snooze && CONFIG.snooze.morningHour) || 9;
+  const mid = nextCtMidnight(now);
+  return mid + hour * HOUR;
+}
+function tzAbbr(v) {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "short" }).formatToParts(new Date(v));
+  return (p.find(x => x.type === "timeZoneName") || { value: "" }).value;
+}
+function fmtCT(v) {
+  const d = new Date(v);
+  const abbr = tzAbbr(d);
+  return new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday:"short", month:"short", day:"numeric" }).format(d) + ", " +
+    new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour:"numeric", minute:"2-digit" }).format(d) + (abbr ? " " + abbr : "");
+}
+function ctKey(t) { return new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year:"numeric", month:"2-digit", day:"2-digit" }).format(new Date(t)); }
+function startOfDay(dateStr) {
+  const parts = String(dateStr).split("-").map(Number);
+  const y = parts[0], m = parts[1], d = parts[2];
+  let t = Date.UTC(y, m - 1, d, 12, 0, 0);
+  const q = tzParts(t);
+  t -= q.h * HOUR + (q.min || 0) * 60000;
+  return t;
+}
+function waitMs(c, now) {
+  if (c.since) return now - new Date(c.since).getTime();
+  if (c.sinceBefore) return now - startOfDay(c.sinceBefore);
+  return null;
+}
+function ageText(c, now) {
+  const ms = waitMs(c, now); if (ms === null) return null;
+  const plus = c.sinceBefore ? "+" : "";
+  if (ms < HOUR) return "<1h";
+  if (ms < DAY) return Math.floor(ms / HOUR) + "h" + plus;
+  return Math.floor(ms / DAY) + "d" + plus;
+}
+function urgencyOn() { return !CONFIG.urgency || CONFIG.urgency.enabled !== false; }
+function dueHours() { return (CONFIG.urgency && CONFIG.urgency.dueWithinHours != null) ? Number(CONFIG.urgency.dueWithinHours) : 48; }
+function waitDays() { return (CONFIG.urgency && CONFIG.urgency.waitingMoreThanDays != null) ? Number(CONFIG.urgency.waitingMoreThanDays) : 3; }
+function dueSoon(c, now) {
+  if (!urgencyOn() || !c.due || c.col === "done") return false;
+  return new Date(c.due).getTime() - now <= dueHours() * HOUR;
+}
+function isUrgent(c, now) {
+  if (!urgencyOn()) return false;
+  if (c.col === "done" || c.col === "reminders") return false;
+  if (dueSoon(c, now)) return true;
+  const ms = waitMs(c, now);
+  return c.col === "waiting" && ms !== null && ms > waitDays() * DAY;
+}
+function isToday(c, now) {
+  if (c.col === "done") return false;
+  if (c.col === "reminders" || isUrgent(c, now)) return true;
+  return !!c.due && ctKey(new Date(c.due).getTime()) <= ctKey(now);
+}
+function hiddenState(id, now) {
+  const h = S.hidden[id]; if (!h) return null;
+  if (h.type === "snooze" && (h.until || 0) <= now) return null;
+  return h;
+}
+function chatLink(id) { return "grokbot://app/v1/agent?id=" + id; }
+function initials(n) {
+  const w = n.replace(/[^A-Za-z' ]/g, " ").split(" ").filter(s => s.length);
+  return ((w[0] || "?").charAt(0) + (w[1] ? w[1].charAt(0) : "")).toUpperCase();
+}
+function thumb(c) {
+  const g = c.group && GROUPS[c.group];
+  if (g && g.logo && CONFIG.logo) return '<div class="thumb" style="background:#fff"><img src="' + CONFIG.logo + '" alt=""></div>';
+  const color = g ? g.color : REM_COLOR;
+  return '<div class="thumb" style="background:' + color + '">' + (c.col === "reminders" ? "⏰" : esc(initials(c.bot))) + '</div>';
+}
+function cardText(c) {
+  return [c.bot, c.title, c.summary, c.next, c.schedule || "", (c.context || []).join(" "), (c.badges || []).join(" ")].join(" ").toLowerCase();
+}
+function customBadgeTags(c) {
+  const list = (CONFIG.badges && CONFIG.badges.custom) || [];
+  const text = cardText(c);
+  const has = (c.badges || []).map(String);
+  return list.filter(b => {
+    if (!b || !b.label) return false;
+    if (b.key && has.indexOf(String(b.key)) >= 0) return true;
+    const kw = String(b.keyword || b.key || "").toLowerCase();
+    return kw && text.indexOf(kw) >= 0;
+  });
+}
+function snoozeKind() { return (UI.snoozeDefault || (CONFIG.snooze && CONFIG.snooze.default) || "midnight"); }
+function snoozeUntil(kind, now) {
+  const k = kind || snoozeKind();
+  if (k === "1h") return now + HOUR;
+  if (k === "4h") return now + 4 * HOUR;
+  if (k === "morning") return nextMorning(now);
+  if (k === "custom") {
+    const hrs = Number((CONFIG.snooze && CONFIG.snooze.customHours) || 2);
+    return now + (hrs > 0 ? hrs : 2) * HOUR;
+  }
+  return nextCtMidnight(now);
+}
+function snoozeLabel(kind) {
+  const k = kind || snoozeKind();
+  if (k === "1h") return "Snooze 1 hour";
+  if (k === "4h") return "Snooze 4 hours";
+  if (k === "morning") return "Snooze until tomorrow morning";
+  if (k === "custom") return "Snooze " + ((CONFIG.snooze && CONFIG.snooze.customHours) || 2) + " hours";
+  return "Snooze until tomorrow";
+}
+
+/* ---------- prefs / UI ---------- */
+function persistOn() { return CONFIG.persistPrefs !== false; }
+function uiDefaults() {
+  const fields = Object.assign({ age: true, deadline: true, group: true, sources: true }, CONFIG.fields || {});
+  return {
+    theme: (CONFIG.theme && CONFIG.theme.preset) || "auto",
+    accent: null,
+    card: null,
+    bg: null,
+    font: null,
+    density: CONFIG.density || "comfortable",
+    fields: fields,
+    moneyBadge: !CONFIG.badges || CONFIG.badges.money !== false,
+    swimlanes: !!CONFIG.swimlanes,
+    defaultFilter: CONFIG.defaultFilter || "all",
+    headerLogo: !!CONFIG.showHeaderLogo,
+    title: CONFIG.title || "Bot Board",
+    snoozeDefault: (CONFIG.snooze && CONFIG.snooze.default) || "midnight"
+  };
+}
+function loadUI() {
+  const d = uiDefaults();
+  if (!persistOn()) return d;
+  const saved = lsGet(LS_UI, null);
+  if (!saved || typeof saved !== "object") return d;
+  const out = Object.assign({}, d, saved);
+  out.fields = Object.assign({}, d.fields, saved.fields || {});
+  return out;
+}
+function saveUI() {
+  if (!persistOn()) return;
+  lsSet(LS_UI, {
+    theme: UI.theme, accent: UI.accent, card: UI.card, bg: UI.bg, font: UI.font,
+    density: UI.density, fields: UI.fields, moneyBadge: UI.moneyBadge,
+    swimlanes: UI.swimlanes, defaultFilter: UI.defaultFilter,
+    headerLogo: UI.headerLogo, title: UI.title, snoozeDefault: UI.snoozeDefault
+  });
+  lsSet(LS_THEME, UI.theme);
+}
+
+const S = {
+  q: "", group: "all", todayOnly: false, showHidden: false, selected: null, snoozeOpen: false,
+  hidden: lsGet(LS_HIDDEN, {}),
+  prefs: persistOn() ? lsGet(LS_PREFS, { font: 13, img: 40 }) : { font: 13, img: 40 }
+};
+if (!S.prefs || typeof S.prefs.font !== "number") S.prefs = { font: 13, img: 40 };
+const UI = loadUI();
+if (persistOn()) {
+  const t = lsGet(LS_THEME, null);
+  if (t && ["auto","light","dark","custom"].indexOf(t) >= 0) UI.theme = t;
+}
+(function applyDefaultFilter() {
+  const f = UI.defaultFilter || "all";
+  if (f === "today") { S.todayOnly = true; S.group = "all"; }
+  else if (f && f !== "all") { S.group = f; S.todayOnly = false; }
+})();
+
+const mq = window.matchMedia("(prefers-color-scheme: dark)");
+function clearVars() {
+  const root = document.documentElement;
+  ["--bg","--panel","--panel2","--edge","--cardEdge","--gold","--goldSoft","--goldInk"].forEach(v => root.style.removeProperty(v));
+  document.body.style.fontFamily = "";
+}
+function themeIsDark() {
+  if (UI.theme === "dark") return true;
+  if (UI.theme === "light") return false;
+  if (UI.theme === "custom") return !!(mq.matches);
+  return mq.matches;
+}
+function applyTheme() {
+  clearVars();
+  const dark = themeIsDark();
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  document.querySelectorAll("[data-theme-btn]").forEach(b => b.classList.toggle("active", b.dataset.themeBtn === UI.theme));
+  const nb = document.getElementById("nightBtn");
+  nb.innerHTML = (dark ? "☀" : "☾") + (UI.theme === "auto" ? '<span class="auto mono">AUTO</span>' : "");
+  nb.title = (dark ? "Night on · tap for Day" : "Day on · tap for Night") + (UI.theme === "auto" ? " (following your computer)" : "") + " · long-press: Auto";
+  const root = document.documentElement;
+  const cfgAccent = CONFIG.theme && CONFIG.theme.accent;
+  const accent = UI.accent || cfgAccent || null;
+  const useAccent = accent && hexOk(accent) && (UI.accent || UI.theme === "custom" || (cfgAccent && String(cfgAccent).toLowerCase() !== "#f2c230"));
+  if (useAccent) {
+    root.style.setProperty("--gold", accent);
+    root.style.setProperty("--goldSoft", hexSoft(accent, dark ? 0.15 : 0.22));
+    root.style.setProperty("--goldInk", dark ? accent : darkenHex(accent));
+  }
+  const card = UI.card, bg = UI.bg;
+  if (card && hexOk(card)) root.style.setProperty("--panel2", card);
+  if (bg && hexOk(bg)) root.style.setProperty("--bg", bg);
+  const fontKey = UI.font;
+  if (fontKey && FONTS[fontKey] && fontKey !== "system") document.body.style.fontFamily = FONTS[fontKey];
+  else if (fontKey && fontKey !== "system" && String(fontKey).length < 120) document.body.style.fontFamily = String(fontKey);
+  document.body.classList.toggle("compact", UI.density === "compact");
+  const title = UI.title || CONFIG.title || "Bot Board";
+  document.getElementById("boardTitle").textContent = title;
+  document.title = title;
+  const logo = document.getElementById("headerLogo");
+  if (UI.headerLogo && CONFIG.logo) { logo.src = CONFIG.logo; logo.style.display = ""; }
+  else { logo.removeAttribute("src"); logo.style.display = "none"; }
+}
+function setTheme(t) { UI.theme = t; saveUI(); applyTheme(); }
+mq.addEventListener ? mq.addEventListener("change", applyTheme) : mq.addListener(applyTheme);
+function applyPrefs() {
+  document.body.style.setProperty("--font", S.prefs.font + "px");
+  document.body.style.setProperty("--img", S.prefs.img + "px");
+  document.body.classList.toggle("noimg", S.prefs.img <= 0);
+}
+
+/* ---------- render ---------- */
+function render() {
+  const now = Date.now();
+  const all = BOARD.cards;
+  const hiddenCount = all.filter(c => hiddenState(c.id, now)).length;
+  const waiting = all.filter(c => !hiddenState(c.id, now) && c.col === "waiting");
+  const urgent = waiting.filter(c => isUrgent(c, now)).length;
+  document.getElementById("count").textContent = waiting.length + " need you · " + urgent + " urgent";
+  document.getElementById("sub").textContent = "click a card for details · updated " + fmtCT(BOARD.updated) + " · pushes " + (CONFIG.pushTimes || "");
+  document.getElementById("hiddenBtn").textContent = "Hidden (" + hiddenCount + ")";
+  document.getElementById("hiddenBtn").classList.toggle("active", S.showHidden);
+  document.getElementById("today").classList.toggle("active", S.todayOnly);
+  document.getElementById("banner").style.display = S.showHidden ? "" : "none";
+  document.querySelectorAll("[data-group]").forEach(b => b.classList.toggle("active", b.dataset.group === S.group));
+
+  const needle = S.q.trim().toLowerCase();
+  const show = UI.fields || {};
+  const visible = all.filter(c => {
+    const h = hiddenState(c.id, now);
+    if (S.showHidden ? !h : h) return false;
+    if (S.group !== "all" && c.group !== undefined && c.group !== S.group) return false;
+    if (S.todayOnly && !isToday(c, now)) return false;
+    if (!needle) return true;
+    return cardText(c).indexOf(needle) >= 0;
+  });
+
+  const cols = visibleColumns();
+  const boardEl = document.getElementById("board");
+  boardEl.style.gridTemplateColumns = "repeat(" + Math.max(1, cols.length) + ", minmax(220px, 1fr))";
+
+  const html = cols.map(col => {
+    const list = visible.filter(c => c.col === col.key).sort((a, b) => {
+      const u = Number(isUrgent(b, now)) - Number(isUrgent(a, now)); if (u) return u;
+      return (a.group ? GROUP_ORDER.indexOf(a.group) : -1) - (b.group ? GROUP_ORDER.indexOf(b.group) : -1);
+    });
+    function cardHtml(c, i, total) {
+      const urg = isUrgent(c, now), age = show.age !== false ? ageText(c, now) : null, h = hiddenState(c.id, now);
+      const meta = [];
+      if (c.col === "reminders") meta.push((c.schedule || "") + " · recurring");
+      else {
+        if (show.group !== false) meta.push(c.group && GROUPS[c.group] ? GROUPS[c.group].label : CONFIG.boardBotName);
+        if (age && c.col !== "done") meta.push((c.col === "waiting" ? "waiting " : "open ") + age);
+      }
+      let tags = (urg ? '<span class="tag urgent mono">URGENT</span>' : "") + (UI.moneyBadge !== false && c.money ? '<span class="tag money mono">$</span>' : "");
+      customBadgeTags(c).forEach(b => {
+        const colr = hexOk(b.color) ? b.color : "var(--gold)";
+        tags += '<span class="tag mono" style="color:' + colr + ";border-color:" + colr + '">' + esc(b.label) + "</span>";
+      });
+      if (h) tags += '<span class="tag hid mono">' + (h.type === "dismiss" ? "DISMISSED" : "SNOOZED → " + esc(fmtCT(h.until || 0))) + "</span>";
+      return '<div class="card' + (c.col === "done" || h ? " faded" : "") + '" tabindex="0" role="button" data-id="' + c.id + '" style="border-left-color:' + (c.group && GROUPS[c.group] ? GROUPS[c.group].color : REM_COLOR) + '">' +
+        '<div class="idx mono">' + (i + 1) + "/" + total + "</div>" +
+        '<div class="top">' + thumb(c) + '<div class="who"><div class="bot">' + esc(c.bot) + '</div>' +
+        (meta.length ? '<div class="meta">' + esc(meta.join(" · ")) + "</div>" : "") +
+        (tags ? '<div class="tags">' + tags + "</div>" : "") + "</div></div>" +
+        '<div class="body"><div class="ttl">' + esc(c.title) + '</div><div class="sum">' + esc(c.summary) + "</div>" +
+        (show.deadline !== false && c.due ? '<div class="due mono' + (dueSoon(c, now) ? " soon" : "") + '">' + esc((c.dueNote || "due") + " " + fmtCT(c.due)) + "</div>" : "") +
+        "</div></div>";
+    }
+    let body = "";
+    if (!list.length) {
+      body = '<div class="empty mono">' + (S.q || S.todayOnly || S.group !== "all" ? "No matches" : S.showHidden ? "Nothing hidden here" : "All clear") + "</div>";
+    } else if (UI.swimlanes) {
+      const lanes = [];
+      GROUP_ORDER.forEach(k => lanes.push(k));
+      lanes.push("");
+      const used = {};
+      lanes.forEach(k => {
+        const items = list.filter(c => (c.group || "") === k);
+        if (!items.length) return;
+        used[k] = true;
+        const label = k && GROUPS[k] ? GROUPS[k].label : (CONFIG.boardBotName || "General");
+        body += '<div class="lane"><div class="lane-label mono">' + esc(label) + "</div>" +
+          items.map(c => cardHtml(c, list.indexOf(c), list.length)).join("") + "</div>";
+      });
+      list.forEach((c, i) => {
+        if (used[c.group || ""]) return;
+        used[c.group || ""] = true;
+        const items = list.filter(x => (x.group || "") === (c.group || ""));
+        const label = c.group && GROUPS[c.group] ? GROUPS[c.group].label : (CONFIG.boardBotName || "General");
+        body += '<div class="lane"><div class="lane-label mono">' + esc(label) + "</div>" +
+          items.map(x => cardHtml(x, list.indexOf(x), list.length)).join("") + "</div>";
+      });
+    } else {
+      body = list.map((c, i) => cardHtml(c, i, list.length)).join("");
+    }
+    return '<section class="col"><div class="colhead" style="background:' + col.color + ";color:" + colInk(col) + '"><div class="n">' + esc(col.label) + '</div><div class="c mono">' + list.length + "</div></div>" +
+      '<div class="colbody">' + body + "</div></section>";
+  }).join("");
+  const scrolls = Array.from(boardEl.querySelectorAll(".colbody")).map(e => e.scrollTop);
+  boardEl.innerHTML = html;
+  boardEl.querySelectorAll(".colbody").forEach((e, i) => { e.scrollTop = scrolls[i] || 0; });
+  renderDrawer();
+}
+
+function renderDrawer() {
+  const scrim = document.getElementById("scrim");
+  const c = BOARD.cards.find(x => x.id === S.selected);
+  if (!c) { scrim.classList.remove("open"); return; }
+  const now = Date.now();
+  const h = hiddenState(c.id, now);
+  const col = COLS.find(x => x.key === c.col);
+  const colLabel = col ? col.label : c.col;
+  const age = ageText(c, now);
+  const show = UI.fields || {};
+  const facts = [];
+  if (c.schedule) facts.push("<span>" + esc(c.schedule) + " · recurring until you remove it</span>");
+  if (show.age !== false && age && c.col !== "done" && c.col !== "reminders") facts.push("<span>" + (c.col === "waiting" ? "waiting " : "open ") + age + (c.since ? " (since " + esc(fmtCT(c.since)) + ")" : " (since before " + esc(c.sinceBefore) + ")") + "</span>");
+  if (show.deadline !== false && c.due) facts.push('<span style="color:' + (dueSoon(c, now) ? "var(--dangerInk)" : "var(--dim)") + '">' + esc((c.dueNote || "deadline") + " " + fmtCT(c.due)) + "</span>");
+  if (UI.moneyBadge !== false && c.money) facts.push('<span style="color:var(--goldInk)">$ financial</span>');
+  if (isUrgent(c, now)) facts.push('<span style="color:var(--dangerInk)">URGENT</span>');
+  const until = snoozeUntil(snoozeKind(), now);
+  const menu = [
+    ["midnight", "Until midnight"],
+    ["1h", "1 hour"],
+    ["4h", "4 hours"],
+    ["morning", "Tomorrow morning"]
+  ].map(pair => '<button type="button" data-act="snooze-for" data-kind="' + pair[0] + '">' + pair[1] + "</button>").join("") +
+    '<div class="snooze-custom"><input id="snoozeHrs" type="number" min="1" max="72" value="' + esc((CONFIG.snooze && CONFIG.snooze.customHours) || 2) + '" aria-label="Custom hours"><button type="button" data-act="snooze-custom">Custom hours</button></div>';
+  const srcs = (show.sources !== false && c.links && c.links.length)
+    ? '<div class="srcs"><div class="k mono">SOURCES</div>' + c.links.map(l => '<a class="lnk" href="' + esc(l.href) + '" target="_blank" rel="noopener noreferrer">' + esc(l.title) + ' <span class="site mono">· ' + esc(l.site) + "</span></a>").join("") + "</div>"
+    : "";
+  document.getElementById("drawer").innerHTML =
+    '<div class="dhead"><div class="l">' + thumb(c) + '<div style="min-width:0"><div class="crumb mono">' + esc(c.bot) + " · " + esc(colLabel) + (show.group !== false && c.group && GROUPS[c.group] ? " · " + esc(GROUPS[c.group].label) : "") + '</div><div class="dt">' + esc(c.title) + "</div></div></div>" +
+    '<button class="btn small" data-act="close" title="Close">✕</button></div>' +
+    (h
+      ? '<div class="row"><button class="btn primary" data-act="restore">Restore card</button><span class="note mono">' + (h.type === "dismiss" ? "Dismissed " + esc(fmtCT(h.at)) : "Snoozed until " + esc(fmtCT(h.until || 0))) + "</span></div>"
+      : '<div class="row"><button class="btn primary" data-act="snooze">' + esc(snoozeLabel()) + '</button><div class="snooze-wrap"><button class="btn small" data-act="snooze-menu" title="More snooze options">▾</button><div class="snooze-menu' + (S.snoozeOpen ? " open" : "") + '" id="snoozeMenu">' + menu + '</div></div><span class="note mono">back ' + esc(fmtCT(until)) + '</span></div>') +
+    (facts.length ? '<div class="facts mono">' + facts.join("") + "</div>" : "") +
+    '<div style="color:var(--dim)">' + esc(c.summary) + "</div>" +
+    (c.context && c.context.length ? '<ul class="d-ctx">' + c.context.map(t => "<li>" + esc(t) + "</li>").join("") + "</ul>" : "") +
+    '<div class="next"><div class="k mono">NEXT STEP</div><div>' + esc(c.next) + "</div></div>" +
+    srcs +
+    '<div class="chat"><a class="lnk" href="' + chatLink(c.botId) + '">Open ' + esc(c.bot) + ' chat →</a><div class="fine mono">Nothing on this board sends anything. Emails, replies, payments and bookings go out only after you approve them in chat.</div></div>' +
+    (h ? "" : '<div class="row dismiss"><button class="btn danger" data-act="dismiss">Dismiss</button><span class="fine mono">hides it for good · restore any time from Hidden</span></div>');
+  scrim.classList.add("open");
+}
+
+function applySnooze(kind, hours) {
+  const id = S.selected; if (!id) return;
+  let until;
+  if (kind === "custom") {
+    const hrs = Number(hours || (document.getElementById("snoozeHrs") && document.getElementById("snoozeHrs").value) || 2);
+    until = Date.now() + (hrs > 0 ? hrs : 2) * HOUR;
+  } else until = snoozeUntil(kind, Date.now());
+  S.hidden[id] = { type: "snooze", until: until, at: Date.now() };
+  lsSet(LS_HIDDEN, S.hidden); S.selected = null; S.snoozeOpen = false; render();
+}
+
+/* ---------- settings ---------- */
+function renderSettings() {
+  const p = document.getElementById("setPanel");
+  const f = UI.fields || {};
+  const filterOpts = [["all","All"],["today","Today"]].concat(GROUP_ORDER.map(k => [k, (GROUPS[k] && (GROUPS[k].button || GROUPS[k].label)) || k]))
+    .map(pair => '<option value="' + esc(pair[0]) + '"' + (UI.defaultFilter === pair[0] ? " selected" : "") + ">" + esc(pair[1]) + "</option>").join("");
+  const snoozeOpts = [["midnight","Until midnight"],["1h","1 hour"],["4h","4 hours"],["morning","Tomorrow morning"],["custom","Custom hours"]]
+    .map(pair => '<option value="' + pair[0] + '"' + (snoozeKind() === pair[0] ? " selected" : "") + ">" + pair[1] + "</option>").join("");
+  const fontVal = UI.font && FONTS[UI.font] ? UI.font : (UI.font ? "system" : "system");
+  p.innerHTML =
+    '<div class="dhead"><h2>Settings</h2><button class="btn small" data-act="set-close" title="Close">✕</button></div>' +
+    '<p class="hint">These options stay in this browser when preference saving is on. Columns and urgency rules are edited in CONFIG, or ask the bot.</p>' +
+    '<h3>THEME</h3><div class="set-row">' +
+      ["auto","light","dark","custom"].map(m => '<button class="btn small" data-theme-btn="' + m + '">' + (m[0].toUpperCase()+m.slice(1)) + "</button>").join("") +
+    "</div>" +
+    '<div class="set-grid">' +
+      '<label>Accent</label><input type="color" id="setAccent" value="' + esc(UI.accent || (CONFIG.theme && CONFIG.theme.accent) || "#f2c230") + '"><input type="text" id="setAccentHex" value="' + esc(UI.accent || "") + '" placeholder="#f2c230">' +
+      '<label>Card</label><input type="color" id="setCard" value="' + esc(UI.card || (themeIsDark() ? "#1b2544" : "#eef2f7")) + '"><input type="text" id="setCardHex" value="' + esc(UI.card || "") + '" placeholder="default">' +
+      '<label>Background</label><input type="color" id="setBg" value="' + esc(UI.bg || (themeIsDark() ? "#000000" : "#d6dde8")) + '"><input type="text" id="setBgHex" value="' + esc(UI.bg || "") + '" placeholder="default">' +
+      '<label>Font</label><select id="setFont"><option value="system"' + (fontVal==="system"?" selected":"") + '>System</option><option value="serif"' + (fontVal==="serif"?" selected":"") + '>Serif</option><option value="mono"' + (fontVal==="mono"?" selected":"") + '>Mono</option></select><span></span>' +
+    "</div>" +
+    '<h3>DENSITY</h3><div class="set-row">' +
+      '<button class="btn small' + (UI.density!=="compact"?" active":"") + '" data-act="density" data-val="comfortable">Comfortable</button>' +
+      '<button class="btn small' + (UI.density==="compact"?" active":"") + '" data-act="density" data-val="compact">Compact</button>' +
+    "</div>" +
+    '<h3>CARD FIELDS</h3><div class="set-row">' +
+      fieldChk("age","Age", f.age !== false) + fieldChk("deadline","Deadline", f.deadline !== false) +
+      fieldChk("group","Group", f.group !== false) + fieldChk("sources","Sources", f.sources !== false) +
+    "</div>" +
+    '<h3>BOARD</h3><div class="set-grid">' +
+      '<label>Title</label><input type="text" id="setTitle" value="' + esc(UI.title || "Bot Board") + '" style="grid-column:span 2">' +
+      '<label>Load filter</label><select id="setFilter">' + filterOpts + "</select><span></span>" +
+      '<label>Snooze</label><select id="setSnooze">' + snoozeOpts + "</select><span></span>" +
+    "</div>" +
+    '<div class="set-row">' +
+      fieldChk("moneyBadge","$ badge", UI.moneyBadge !== false) +
+      fieldChk("swimlanes","Swimlanes by group", !!UI.swimlanes) +
+      fieldChk("headerLogo","Show logo in header", !!UI.headerLogo) +
+    "</div>" +
+    '<p class="hint">Refresh on/off and the interval are in the top-right timer (00:00:00 turns it off).</p>' +
+    '<div class="set-row"><button class="btn" id="resetPrefs" type="button">Reset to defaults</button></div>';
+}
+function fieldChk(key, label, on) {
+  return '<label class="chk"><input type="checkbox" data-field="' + key + '"' + (on ? " checked" : "") + "> " + esc(label) + "</label>";
+}
+function openSettings() { renderSettings(); document.getElementById("setScrim").classList.add("open"); document.getElementById("gearBtn").classList.add("active"); applyTheme(); }
+function closeSettings() { document.getElementById("setScrim").classList.remove("open"); document.getElementById("gearBtn").classList.remove("active"); }
+function resetPrefs() {
+  lsDel(LS_UI); lsDel(LS_THEME); lsDel(LS_PREFS); lsDel(LS_REFRESH);
+  S.prefs = { font: 13, img: 40 };
+  const d = uiDefaults();
+  Object.keys(d).forEach(k => { UI[k] = d[k]; });
+  applyPrefs(); applyTheme();
+  if (typeof applyRefreshDefault === "function") applyRefreshDefault(true);
+  S.group = "all"; S.todayOnly = false;
+  const f = UI.defaultFilter || "all";
+  if (f === "today") S.todayOnly = true;
+  else if (f !== "all") S.group = f;
+  render(); renderSettings(); applyTheme();
+}
+function bindColor(colorId, hexId, key) {
+  const c = document.getElementById(colorId), h = document.getElementById(hexId);
+  if (!c || !h) return;
+  c.addEventListener("input", () => { UI[key] = c.value; h.value = c.value; if (key==="accent" && UI.theme==="auto") UI.theme = "custom"; saveUI(); applyTheme(); });
+  h.addEventListener("change", () => {
+    const v = h.value.trim();
+    if (!v) { UI[key] = null; saveUI(); applyTheme(); return; }
+    if (!hexOk(v)) return;
+    UI[key] = v; c.value = v; if (key==="accent" && UI.theme==="auto") UI.theme = "custom"; saveUI(); applyTheme();
+  });
+}
+
+/* ---------- events ---------- */
+document.getElementById("groups").innerHTML = GROUP_BTNS.map(([v, l]) => '<button class="btn" data-group="' + v + '">' + l + "</button>").join("");
+document.addEventListener("click", e => {
+  const t = e.target.closest("button, .card, #scrim, #setScrim, label");
+  if (!t) return;
+  if (t.id === "setScrim") { if (e.target.closest("#setPanel")) return; closeSettings(); return; }
+  if (t.id === "gearBtn") { document.getElementById("setScrim").classList.contains("open") ? closeSettings() : openSettings(); return; }
+  if (t.dataset.themeBtn) { setTheme(t.dataset.themeBtn); if (document.getElementById("setScrim").classList.contains("open")) renderSettings(); return; }
+  if (t.id === "nightBtn") {
+    if (longPressed) { longPressed = false; return; }
+    setTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"); return;
+  }
+  if (t.dataset.bump) {
+    const d = Number(t.dataset.d);
+    if (t.dataset.bump === "font") S.prefs.font = Math.max(10, Math.min(20, S.prefs.font + d));
+    else S.prefs.img = Math.max(0, Math.min(88, S.prefs.img + d));
+    if (persistOn()) lsSet(LS_PREFS, S.prefs); applyPrefs(); return;
+  }
+  if (t.dataset.group) { S.group = t.dataset.group; render(); return; }
+  if (t.id === "today") { S.todayOnly = !S.todayOnly; render(); return; }
+  if (t.id === "hiddenBtn") { S.showHidden = !S.showHidden; render(); return; }
+  if (t.classList.contains("card")) { S.selected = t.dataset.id; S.snoozeOpen = false; renderDrawer(); return; }
+  if (t.id === "resetPrefs") { resetPrefs(); return; }
+  if (t.dataset.act === "density") { UI.density = t.dataset.val; saveUI(); applyTheme(); render(); renderSettings(); return; }
+  if (t.dataset.act === "set-close") { closeSettings(); return; }
+  const act = t.dataset.act, id = S.selected;
+  if (act === "close" || t.id === "scrim") { S.selected = null; S.snoozeOpen = false; renderDrawer(); return; }
+  if (act === "snooze-menu") { e.stopPropagation(); S.snoozeOpen = !S.snoozeOpen; renderDrawer(); return; }
+  if (act === "snooze") { applySnooze(snoozeKind()); return; }
+  if (act === "snooze-for") { applySnooze(t.dataset.kind); return; }
+  if (act === "snooze-custom") { applySnooze("custom"); return; }
+  if (act === "dismiss") { S.hidden[id] = { type: "dismiss", at: Date.now() }; lsSet(LS_HIDDEN, S.hidden); S.selected = null; S.snoozeOpen = false; render(); return; }
+  if (act === "restore") { delete S.hidden[id]; lsSet(LS_HIDDEN, S.hidden); S.selected = null; render(); return; }
+});
+document.getElementById("setPanel").addEventListener("change", e => {
+  const t = e.target;
+  if (t.id === "setFont") { UI.font = t.value === "system" ? null : t.value; saveUI(); applyTheme(); }
+  if (t.id === "setFilter") { UI.defaultFilter = t.value; saveUI(); }
+  if (t.id === "setSnooze") { UI.snoozeDefault = t.value; saveUI(); if (S.selected) renderDrawer(); }
+  if (t.id === "setTitle") { UI.title = t.value.trim() || (CONFIG.title || "Bot Board"); saveUI(); applyTheme(); }
+  if (t.dataset.field) {
+    const k = t.dataset.field, on = t.checked;
+    if (k === "moneyBadge") UI.moneyBadge = on;
+    else if (k === "swimlanes") UI.swimlanes = on;
+    else if (k === "headerLogo") UI.headerLogo = on;
+    else { UI.fields = UI.fields || {}; UI.fields[k] = on; }
+    saveUI(); applyTheme(); render();
+  }
+});
+document.getElementById("setPanel").addEventListener("click", e => e.stopPropagation());
+document.getElementById("drawer").addEventListener("click", e => { if (!e.target.closest("button")) e.stopPropagation(); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    if (document.getElementById("setScrim").classList.contains("open")) { closeSettings(); return; }
+    if (S.selected) { S.selected = null; S.snoozeOpen = false; renderDrawer(); return; }
+  }
+  const card = e.target.closest && e.target.closest(".card");
+  if (card && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); S.selected = card.dataset.id; S.snoozeOpen = false; renderDrawer(); }
+});
+let lpTimer = null, longPressed = false;
+const nightBtn = document.getElementById("nightBtn");
+nightBtn.addEventListener("pointerdown", () => { longPressed = false; clearTimeout(lpTimer); lpTimer = setTimeout(() => { longPressed = true; setTheme("auto"); }, 600); });
+["pointerup", "pointerleave", "pointercancel"].forEach(ev => nightBtn.addEventListener(ev, () => clearTimeout(lpTimer)));
+nightBtn.addEventListener("contextmenu", e => e.preventDefault());
+document.getElementById("q").addEventListener("input", e => { S.q = e.target.value; render(); });
+document.getElementById("setScrim").addEventListener("click", e => { if (e.target.id === "setScrim") closeSettings(); });
+
+/* ---------- auto-reload ---------- */
+function defaultRefreshSec() {
+  const r = CONFIG.refresh || {};
+  if (r.enabled === false) return 0;
+  const n = Number(r.intervalSec);
+  if (n === 0) return 0;
+  if (n >= REFRESH_MIN) return n;
+  return REFRESH_DEFAULT;
+}
+let refreshSec = persistOn() ? Number(lsGet(LS_REFRESH, defaultRefreshSec())) : defaultRefreshSec();
+if (!(refreshSec === 0 || refreshSec >= REFRESH_MIN)) refreshSec = defaultRefreshSec();
+let remaining = refreshSec;
+const rIn = document.getElementById("refreshIn"), rLeft = document.getElementById("refreshLeft");
+function hms(t) { const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), x = t % 60; return [h, m, x].map(n => String(n).padStart(2, "0")).join(":"); }
+function parseHms(v) {
+  const m = /^\s*(\d{1,2}):([0-5]\d):([0-5]\d)\s*$/.exec(v);
+  return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null;
+}
+function isPaused() { return !!S.selected || document.activeElement === rIn || document.getElementById("setScrim").classList.contains("open"); }
+function showLeft() {
+  rLeft.classList.remove("paused");
+  if (refreshSec === 0) { rLeft.textContent = "off"; return; }
+  if (isPaused()) { rLeft.textContent = "paused"; rLeft.classList.add("paused"); return; }
+  const t = remaining;
+  rLeft.textContent = "in " + (t >= 3600 ? hms(t) : hms(t).slice(3));
+}
+function commitRefresh() {
+  const v = parseHms(rIn.value);
+  if (v === null || (v !== 0 && v < REFRESH_MIN)) {
+    rIn.classList.add("bad");
+    rIn.title = v === null ? "Use hh:mm:ss, e.g. 00:15:00" : "Minimum is 00:00:30 (00:00:00 turns it off)";
+    return false;
+  }
+  rIn.classList.remove("bad"); rIn.title = "";
+  refreshSec = v; remaining = v; if (persistOn()) lsSet(LS_REFRESH, v); rIn.value = hms(v); showLeft();
+  return true;
+}
+function applyRefreshDefault(force) {
+  refreshSec = defaultRefreshSec();
+  remaining = refreshSec;
+  rIn.value = hms(refreshSec);
+  showLeft();
+}
+rIn.value = hms(refreshSec);
+rIn.addEventListener("keydown", e => { if (e.key === "Enter") { if (commitRefresh()) rIn.blur(); } else if (e.key === "Escape") { rIn.value = hms(refreshSec); rIn.classList.remove("bad"); rIn.blur(); } });
+rIn.addEventListener("input", () => rIn.classList.remove("bad"));
+rIn.addEventListener("focus", showLeft);
+rIn.addEventListener("blur", () => { if (!commitRefresh()) { rIn.value = hms(refreshSec); rIn.classList.remove("bad"); } showLeft(); });
+document.getElementById("reloadNow").addEventListener("click", () => location.reload());
+setInterval(() => {
+  if (refreshSec > 0 && !isPaused()) { remaining--; if (remaining <= 0) { location.reload(); return; } }
+  showLeft();
+}, 1000);
+showLeft();
+
+function bindSettingsColors() {
+  bindColor("setAccent","setAccentHex","accent");
+  bindColor("setCard","setCardHex","card");
+  bindColor("setBg","setBgHex","bg");
+}
+const _openSettings = openSettings;
+openSettings = function () { _openSettings(); bindSettingsColors(); };
+
+applyTheme(); applyPrefs(); render();
+setInterval(render, 60000);
+</script>
+</body>
+</html>
